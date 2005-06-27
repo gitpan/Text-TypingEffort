@@ -9,7 +9,7 @@ require Exporter;
 
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw( effort );
-our $VERSION = '0.01';
+our $VERSION = '0.20';
 
 our %basis;  # stores the basis for our calculations
 
@@ -42,60 +42,132 @@ This module is useful for determining which keyboard layout is
 more efficient, for making API/language design decisions, or to show your
 boss how hard you're working.
 
+=head2 Function Quick Reference
+
+The following quick reference provides brief information about the 
+arguments that the functions can take.  More detailed information is
+given below.
+
+ # effort() with a single argument
+ my $effort = effort(
+ 
+    $text | \$text                        # the text to analyze
+ );
+ 
+ # effort() with options
+ my $effort = effort(
+ 
+    text     => $text | \$text,           # the text to analyze
+    file     => $filename | $filehandle,  # analyze a file
+    layout   => 'qwerty'                  # keyboard layout
+              | 'dvorak'
+              | 'aset',
+    unknowns => 0 | 1,                    # tally unknown chars?
+    initial  => \%metrics,                # set initial values
+ );
+
 =head1 FUNCTIONS
 
 =head2 effort $TEXT | \$TEXT
 
-The parameter should be a scalar or a reference to a scalar which contains
+The argument should be a scalar or a reference to a scalar which contains
 the text to be analyzed.  Leading whitespace on each line of C<$TEXT>
 is ignored since a decent text editor handles that for the typist.
 Only characters found on a standard US-104 keyboard are tallied in the
 metrics.  That means that accented characters, unicode, etc. are not
-included.  If a character is unrecognized, it will be silently ignored.
+included.  If a character is unrecognized, it is counted under the
+'unknowns' metric.
 
-=head2 effort %PARAMETERS
+=head2 effort %ARGUMENTS
 
-effort() may also be called with a list of named parameters.  This allows
+effort() may also be called with a list of named arguments.  This allows
 more flexibility in how the metrics are calculated.  Below is a list of
-acceptable (or required) parameters.
+acceptable (or required) arguments.  In summary, calling effort like this
 
-=over 4
+ effort($text);
 
-=item B<text>
+is identical to explicitly specifying all the defaults like this
 
-=item B<file>
+ effort(
+    text     => $text,
+    layout   => 'qwerty',
+    unknowns => 0,
+    initial  => {},
+ );
 
-One of these two options must be specified.  If neither is specified,
-effort() will C<die>.  The value of B<text>
-should be a scalar or reference to a scalar containing the text to
-analyze.  The value of B<file> should be a filehandle which
-is open for reading or a file name.
 
-=item B<layout>
+=head3 text
+
+Specifies the text to be analyzed.  The value should be either a scalar or
+a reference to a scalar which contains the text.  If neither this argument
+nor B<file> is specified, C<effort> will die.
+
+=head3 file
+
+Specifies a file which contains the text to be analyzed.  If the value
+is a filehandle which is open for reading, the text will be read from that
+file handle.  The filehandle will remain open after C<effort> is finished 
+with it.
+
+If the value is a filename, the file will be opened and the text for analysis
+read from the file.  If neither this argument nor B<text> is specified,
+C<effort> will die.
+
+=head3 layout
 
 Default: qwerty
 
-This parameter specifies the keyboard layout to use when calculating
-metrics.  The value of B<layout> should be either 'qwerty' or 'dvorak'.  If
-a value different from those is specified, the default value of 'qwerty'
+Specifies the keyboard layout to use when calculating metrics.
+Acceptable, case-insensitive values for B<layout> are: qwerty, dvorak,
+aset.  If some other value is provided, the default value of 'qwerty'
 is used.
 
-=back
+=head3 unknowns
 
-Calling effort like: C<effort($text)> is identical to calling
-it like this
+Default: 0
 
- effort(
-    text   => $text,
-    layout => 'qwerty',
- );
+Should a histogram of unrecognized characters be returned with the other
+metrics?  A true value indicates yes and a false value no. Tallying this
+histogram takes a little bit more work in the inner loop and therefore
+makes processing ever so slightly slower.  It can be useful for seeing
+how much of the text was not counted in the other metrics.
+
+See B<unknowns> in the L</METRICS> section for information on how this option
+affects C<effort>'s return value.
+
+=head3 initial
+
+Default: {}
+
+Sets the initial values for each of the metrics.  This option is the way to
+have C<effort> accumulate the results of multiple calls.  By doing something
+like
+
+ $effort = effort($text_1);
+ $effort = effort(text=>$text_2, initial=>$effort);
+
+you get the same results as if you had done
+
+ $effort = effort($text_1 . $text_2);
+
+except the former scales more gracefully.  The value of B<initial> should
+be a hashref with keys and values similar to the result of a previous
+call to C<effort>.  If the hashref does not contain a key-value pair
+for a given metric, the initial value of that metric will be its normal
+default value (generally 0).
+
+If the value of B<initial> is not a hashref, C<effort> proceeds as if
+the B<initial> argument were not present at all.  This behavior may
+change in the future, so don't rely upon it.
 
 =cut
 
 sub effort {
     # establish the default options
     my @DEFAULTS = (
-        layout => 'qwerty',
+        layout   => 'qwerty',
+        unknowns => 0,
+        initial  => {},
     );
 
     # establish our current options
@@ -109,6 +181,7 @@ sub effort {
     return unless defined $opts{file} or defined $opts{text};
 
     # fill in the preliminary data structures as needed
+    $opts{layout} = lc($opts{layout});
     %basis = &_basis( $opts{layout} )
         unless $basis{LAYOUT} and $basis{LAYOUT} eq $opts{layout};
 
@@ -135,17 +208,33 @@ sub effort {
     if( $fh ) {
         $line = <$fh>;
     } else {
+        $$text =~ /^/g; # reset the regex in case we're given same arg twice
         $$text =~ /($line_rx)/g;
         $line = $1; # the pattern always matches (I think)
     }
 
+    # set the default initial values for the metrics
     my %sum;
+    @sum{qw(characters presses distance)} = (0) x 3;
+    $sum{unknowns} = {} if $opts{unknowns};
+
+    # munge the initial values based on the 'initial' option
+    if( ref($opts{initial}) eq 'HASH' and keys %{$opts{initial}} ) {
+        for (qw/characters presses distance/) {
+            $sum{$_} = $opts{initial}{$_} if defined $opts{initial}{$_};
+        }
+        for (qw/presses distance/) {
+            $sum{unknowns}{$_} = { %{ $opts{initial}{unknowns}{$_} } }
+                if defined $opts{initial}{unknowns}{$_};
+        }
+    }
+
     while( defined $line ) {
         if( chomp $line ) {
             # the newline counts as a character, a keypress and an ENTER
             $sum{characters}++;
             $sum{presses}++;
-            $sum{distance} += $basis{ENTER};
+            $sum{distance} += $basis{distance}{ENTER};
         }
         $line =~ s/^\s*//;
         $line =~ s/\s*$//;
@@ -155,11 +244,10 @@ sub effort {
             $sum{characters}++ if exists $basis{presses}{$_};
 
             foreach my $metric (qw/presses distance/) {
-                if( exists $basis{$metric}{$_} ) {
+                if( defined $basis{$metric}{$_} ) {
                     $sum{$metric} += $basis{$metric}{$_};
-                } else {
-                    #warn "$metric for '$_' was not found\n";
-                    $basis{$metric}{$_} = 0;
+                } elsif( $opts{unknowns} ) {
+                    $sum{unknowns}{$metric}{$_}++;
                 }
             }
         }
@@ -178,7 +266,6 @@ sub effort {
 
     close $fh if $close_fh;
 
-    $sum{distance} = 2*$sum{distance};  # initially, distance is only one-way
     $sum{energy} = (&J_per_mm*$sum{distance}) + (&J_per_click*$sum{presses});
 
     return \%sum;
@@ -226,6 +313,39 @@ a copy).
 The physical charactersistics of the keyboard are assumed to be roughly in
 line with ISO 9241-4:1998, which specifies standards for such things.
 
+=head2 unknowns
+
+This metric is only included in the output if the B<unknowns> argument
+to C<effort> was true.
+
+The value is a histogram of the unrecognized characters encountered during
+processing.  This includes any control characters, accented characters or
+unicode characters.  Generally, anything other than the letters, numbers
+and punctuation found on a standard U.S. keyboard will be counted here.
+
+If all characters were recognized, the value will be an empty hashref.
+If any characters were unknown, the value will be a hashref something
+like this:
+
+ unknowns => {
+    presses => {
+        'Å' => 2,
+        'Ö' => 3,
+    },
+    distance => {
+        'Å' => 2,
+        'Ö' => 3,
+    },
+ }
+
+The key indicates the metric for which information was missing.  The value
+is a hash indicating the character and the number of times that character
+occurred.  There will be no entries in the hash for the B<characters>
+or B<energy> metrics as these are incidental to the other two.
+
+This metric is only added to the result if the B<unknowns> option was
+specified and true.
+
 =head1 SEE ALSO
 
 Tactus Keyboard article on the mechanics and standards of
@@ -233,40 +353,12 @@ keyboard design - L<http://www.tactuskeyboard.com/keymech.htm>
 
 =head1 AUTHOR
 
-Michael Hendricks, E<lt>michael@palmcluster.orgE<gt>
+Michael Hendricks E<lt>michael@palmcluster.orgE<gt>
 
-=head1 TODO
+=head1 BUGS/TODO
 
-=over 2
-
-=item *
-
-Add an 'accumulator' option which allows effort() to add it's results
-to those from a previous call to effort().
-
-=item *
-
-Count the unrecognized characters
-
-=item *
-
-Add support for the 'aset' keyboard which is like QWERTY, but has the 
-dfjk keys swapped with the etni keys.
-
-=item *
-
-Allow the user to specify custom keyboard layouts
-
-=item *
-
-Allow keyboards other than US-104
-
-=item *
-
-Add options for specifying the characteristics of the keyboard such as
-key displacement and the force required to depress the keys.
-
-=back
+Please submit suggestions and report bugs to the CPAN Bug Tracker at
+L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=Text-TypingEffort>
 
 =head1 COPYRIGHT AND LICENSE
 
@@ -293,20 +385,18 @@ sub _basis {
 
     # get the layout
     my @layout;
-    if( $desired =~ /^dvorak$/i ) {
-        @layout = &dvorak;
-    } else {
-        @layout = &qwerty;
-    }
+       if( $desired =~ /^dvorak$/i ) { @layout = &dvorak }
+    elsif( $desired =~ /^aset$/i   ) { @layout = &aset   }
+    else                             { @layout = &qwerty }
 
     # get some keyboard characteristics
     my($lshift,$rshift) = splice(@keyboard, 0, 2);
 
     # the space character is somewhat exceptional
-    $basis{distance}{' '} = shift @keyboard;
+    $basis{distance}{' '} = 2*shift(@keyboard);
     $basis{presses}{' '} = 1;
 
-    $basis{ENTER} = shift @keyboard;
+    $basis{distance}{ENTER} = 2*shift(@keyboard);
 
     # populate $basis{clicks} and $basis{mm}
     while( my($shift, $d) = splice(@keyboard, 0, 2) ) {
@@ -315,8 +405,9 @@ sub _basis {
         $basis{presses}{$lc} = 1;
         $basis{presses}{$uc} = 2;
 
-        $basis{distance}{$lc} = $d;
-        $basis{distance}{$uc} = $d + ($shift eq 'l' ? $lshift : $rshift);
+        # the *2 is because distances are initially one-way
+        $basis{distance}{$lc} = 2*$d;
+        $basis{distance}{$uc} = 2*($d + ($shift eq 'l' ? $lshift : $rshift));
     }
 
     return %basis;
@@ -564,6 +655,77 @@ sub dvorak {
             v V
             z Z
         },
+    );
+}
+
+sub aset {
+    no warnings 'qw';  # stop warnings about the '#' and ',' characters
+    return (
+        # the first value is the character generated by pressing the key
+        # without any modifier.  The second value is the character generated
+        # when pressing the key along with the SHIFT key.
+        # define the 12345 row
+        qw{
+            ` ~
+            1 !
+            2 @
+            3 #
+            4 $
+            5 %
+            6 ^
+            7 &
+            8 *
+            9 (
+            0 )
+            - _
+            = +
+            \ |
+        },
+
+        # define the QWERTY row
+        qw/
+            q  Q
+            w  W
+            d  D
+            r  R
+            f  F
+            y  Y
+            u  U
+            k  K
+            o  O
+            p  P
+            [  {
+            ]  }
+        /,
+
+        # define the home row
+        qw{
+            a A
+            s S
+            e E
+            t T
+            g G
+            h H
+            n N
+            i I
+            l L
+            ; :
+            ' "
+        },
+
+        # define the ZXCVB row
+        qw{
+            z Z
+            x X
+            c C
+            v V
+            b B
+            j J
+            m M
+            , <
+            . >
+            / ?
+        }
     );
 }
 
