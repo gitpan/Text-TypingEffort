@@ -6,7 +6,7 @@ use Text::TypingEffort qw(effort);
 $Getopt::Std::STANDARD_HELP_VERSION = 1;
 
 my %opts;            # command-line options go here
-getopts('l:', \%opts);
+getopts('l:c:', \%opts);
 
 push @ARGV, '-' unless @ARGV;
 
@@ -16,6 +16,7 @@ foreach (@ARGV) {
         file    => $_ eq '-' ? \*STDIN : $_,
         layout  => $opts{l},
         initial => $effort,
+        caps    => $opts{c},
     );
 }
 
@@ -47,6 +48,8 @@ filenames are specified, standard input is used.
 Options:
   -l layout   specify the desired keyboard layout where 'layout' is
               one of: qwerty, dvorak, aset
+  -c number   specify the number of capital letters that must be in
+              a row before Caps Lock will be used
 
 USAGE
 }
@@ -54,8 +57,8 @@ USAGE
 sub VERSION_MESSAGE {
     my ($fh) = @_;
 
-    my $rev = sprintf("%d", q$Revision: 76 $ =~ /(\d+)/);
-    my $date = sprintf("%s", q$Date: 2005-06-27 16:55:20 -0600 (Mon, 27 Jun 2005) $ =~ /\( (.*?) \)/x);
+    my $rev = sprintf("%d", q$Revision: 88 $ =~ /(\d+)/);
+    my $date = sprintf("%s", q$Date: 2005-07-07 16:18:54 -0600 (Thu, 07 Jul 2005) $ =~ /\( (.*?) \)/x);
 
     print $fh <<MSG;
 $0 revision $rev
@@ -64,4 +67,38 @@ $0 revision $rev
 
 MSG
 }
+
+__END__
+
+=head1 NAME
+
+effort - command-line interface to Text::TypingEffort
+
+=head1 SYNOPSIS
+
+ effort -l dvorak -c6 journal/*.txt
+
+calculates the effort required to type all the .txt files in the directory
+journal/ using the Dvorak keyboard layout and assuming that the Caps Lock
+key was only used when 6 or more capitals were typed in a row.
+
+=head1 DESCRIPTION
+
+A simple command-line interface to the L<Text::TypingEffort> module.  Run
+C<effort --help> for full usage instructions.
+
+=head1 SEE ALSO
+
+L<Text::TypingEffort>
+
+=head1 AUTHOR
+
+Michael Hendricks <michael@palmcluster.org>
+
+=head1 COPYRIGHT
+
+Copyright 2005 Michael Hendricks. All rights reserved.
+
+This library is free software. You can redistribute it and/or modify it under
+the same terms as Perl itself.
 

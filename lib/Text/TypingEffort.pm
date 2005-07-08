@@ -8,10 +8,15 @@ use Carp;
 require Exporter;
 
 our @ISA = qw(Exporter);
-our @EXPORT_OK = qw( effort );
-our $VERSION = '0.20';
+our @EXPORT_OK = qw(
+    effort
+    layout
+    register_layout
+);
+our $VERSION = '0.21';
 
-our %basis;  # stores the basis for our calculations
+our %basis;   # stores the basis for our calculations
+our %layouts; # stores the keyboard layouts
 
 =head1 NAME
 
@@ -54,7 +59,7 @@ given below.
     $text | \$text                        # the text to analyze
  );
  
- # effort() with options
+ # effort() with named arguments
  my $effort = effort(
  
     text     => $text | \$text,           # the text to analyze
@@ -64,25 +69,34 @@ given below.
               | 'aset',
     unknowns => 0 | 1,                    # tally unknown chars?
     initial  => \%metrics,                # set initial values
+    caps     => 0 | 2 | 3 | ...           # Caps Lock technique
  );
+ 
+ # layout()
+ my $l = layout;                          # get QWERTY layout
+ my $l = layout($layout_name);            # get named layout
+ 
+ # register_layout()
+ register_layout($name, \@layout);        # register custom layout
 
 =head1 FUNCTIONS
 
-=head2 effort $TEXT | \$TEXT
+=head2 effort [$TEXT | \$TEXT]
 
 The argument should be a scalar or a reference to a scalar which contains
-the text to be analyzed.  Leading whitespace on each line of C<$TEXT>
+the text to be analyzed.  If no parameter is provided, C<$_> is used
+as the value of C<$TEXT>.  Leading whitespace on each line of C<$TEXT>
 is ignored since a decent text editor handles that for the typist.
-Only characters found on a standard US-104 keyboard are tallied in the
-metrics.  That means that accented characters, unicode, etc. are not
-included.  If a character is unrecognized, it is counted under the
-'unknowns' metric.
+Only characters found on a standard US-104 keyboard are tallied in
+the metrics.  That means that accented characters, unicode, etc. are
+not included.  If a character is unrecognized, it may be counted under
+the 'unknowns' metric (see that documentation).
 
 =head2 effort %ARGUMENTS
 
 effort() may also be called with a list of named arguments.  This allows
 more flexibility in how the metrics are calculated.  Below is a list of
-acceptable (or required) arguments.  In summary, calling effort like this
+acceptable arguments.  In summary, calling effort like this
 
  effort($text);
 
@@ -93,6 +107,7 @@ is identical to explicitly specifying all the defaults like this
     layout   => 'qwerty',
     unknowns => 0,
     initial  => {},
+    caps     => 4,
  );
 
 
@@ -100,7 +115,7 @@ is identical to explicitly specifying all the defaults like this
 
 Specifies the text to be analyzed.  The value should be either a scalar or
 a reference to a scalar which contains the text.  If neither this argument
-nor B<file> is specified, C<effort> will die.
+nor B<file> is specified, C<$_> is used as the text to analyze.
 
 =head3 file
 
@@ -111,7 +126,7 @@ with it.
 
 If the value is a filename, the file will be opened and the text for analysis
 read from the file.  If neither this argument nor B<text> is specified,
-C<effort> will die.
+C<$_> is used as the text to analyze.
 
 =head3 layout
 
@@ -160,25 +175,54 @@ If the value of B<initial> is not a hashref, C<effort> proceeds as if
 the B<initial> argument were not present at all.  This behavior may
 change in the future, so don't rely upon it.
 
+=head3 caps
+
+Default: 4
+
+Determines how strings of consecutive capital letters should be handled.
+The default value of 4 means that four or more capital letters in a
+row should be treated as though the user pressed "Caps Lock" at the
+beginning, then typed the characters and then pressed "Caps Lock" again.
+This behavior more accurately models what typical users do when typing
+strings of capital letters.  You may change the number of capital letters
+that must be in a row in order to trigger this behavior by specifying
+an integer greater than 1 as the value of the B<caps> argument.  If you
+specify, the value 1, the value 2 will be used instead.
+
+If the value of B<caps> is 0, capital letters are treated as though the
+user pressed Shift for each one.  If C<undef> is given, the default
+value of B<caps> is used.
+
+When caps handling is enabled, "capital letter" means any character that
+can be typed without the Shift key when Caps Lock is on.  That includes
+characters such as '.' and '/' and '-' etc.  However, the string of
+consecutive caps must start and end with a real capital letter.  That way,
+a string such as '-----T-----' won't be calculated using Caps Lock.
+
 =cut
 
 sub effort {
     # establish the default options
-    my @DEFAULTS = (
+    my %DEFAULTS = (
         layout   => 'qwerty',
         unknowns => 0,
         initial  => {},
+        caps     => 4,
     );
 
     # establish our current options
     my %opts;
     if( @_ == 1 ) {
-        %opts = ( @DEFAULTS, text=>$_[0] );
+        %opts = ( %DEFAULTS, text=>$_[0] );
     } else {
-        %opts = ( @DEFAULTS, @_ );
+        %opts = ( %DEFAULTS, @_ );
     }
     
-    return unless defined $opts{file} or defined $opts{text};
+    $opts{text} = $_ unless defined $opts{file} or defined $opts{text};
+
+    # repair the caps argument
+    $opts{caps} = $DEFAULTS{caps} unless defined $opts{caps};
+    $opts{caps} = 2               if     $opts{caps} == 1;
 
     # fill in the preliminary data structures as needed
     $opts{layout} = lc($opts{layout});
@@ -239,6 +283,18 @@ sub effort {
         $line =~ s/^\s*//;
         $line =~ s/\s*$//;
 
+        # handle consecutive chunks typed with Caps Lock on
+        if( $opts{caps} ) {
+            my $c = $opts{caps}-2;
+            my $p = q{[A-Z]};  # pure caps
+            my $d = q{[[:space:]A-Z0-9,./;'\[\]\\=`-]}; # defiled caps
+            if( my $caps = $line =~ s#($p $d {$c,} $p)#\L$1#gx ) {
+                # turn caps on and off for each chunk
+                $sum{presses} += 2*$caps;
+                $sum{distance} += 2*$caps*$basis{distance}{CAPS};
+            }
+        }
+
         foreach(split //, $line) {
             # only count the character if we recognize it
             $sum{characters}++ if exists $basis{presses}{$_};
@@ -269,6 +325,61 @@ sub effort {
     $sum{energy} = (&J_per_mm*$sum{distance}) + (&J_per_click*$sum{presses});
 
     return \%sum;
+}
+
+=head2 layout [$NAME]
+
+Returns an arrayref representing the requested layout or C<undef> if
+the given name is unknown.  If no layout name is provided, the QWERTY
+layout is returned.
+
+See C<register_layout> below or the Text::TypingEffort source code for
+examples of the contents of the arrayref.
+
+=cut
+
+sub layout {
+    my $name = lc(shift) || 'qwerty';
+    return $layouts{$name} if exists $layouts{$name};
+    return undef;
+}
+
+=head2 register_layout $NAME, \@LAYOUT
+
+Register a new layout, using the given name.  The name is stored
+without regard to case, so 'NAME' and 'name' are considered the same.
+The layout itself should be an arrayref containing each key's character
+and its shifted version.  Running the code below displays a pseudo-code
+snippet showing how the QWERTY keyboard layout is defined.  Start in
+the upper-left corner of a QWERTY keyboard and follow along through
+the pseudo-code.  You should get the idea.  You can also find documented
+examples in the source code.
+
+ use Text::TypingEffort qw/layout/;
+ $l = layout;
+ print "register_layout('qwerty', [qw{\n";
+ while( ($lower, $upper) = splice(@$l, 0, 2) ) {
+        print "\t$lower $upper\n";
+ }
+ print "}]);\n";
+
+Typically, C<register_layout> is called just prior to C<effort>.  For
+example:
+
+ my @layout = qw{
+    ...
+ };
+ register_layout('my custom layout', \@layout);
+ my $e = effort(
+    text   => $text,
+    layout => 'my custom layout',
+ );
+
+=cut
+
+sub register_layout {
+    my $name = lc shift;
+    $layouts{$name} = shift;
 }
 
 =head1 METRICS
@@ -353,7 +464,10 @@ keyboard design - L<http://www.tactuskeyboard.com/keymech.htm>
 
 =head1 AUTHOR
 
-Michael Hendricks E<lt>michael@palmcluster.orgE<gt>
+Michael Hendricks <michael@palmcluster.org>
+
+Thanks to Ricardo Signes for a patch for the C<layout> and
+C<register_layout> subroutines.
 
 =head1 BUGS/TODO
 
@@ -384,10 +498,7 @@ sub _basis {
     my @keyboard = &us_104;
 
     # get the layout
-    my @layout;
-       if( $desired =~ /^dvorak$/i ) { @layout = &dvorak }
-    elsif( $desired =~ /^aset$/i   ) { @layout = &aset   }
-    else                             { @layout = &qwerty }
+    my @layout = @{ layout($desired) || layout };
 
     # get some keyboard characteristics
     my($lshift,$rshift) = splice(@keyboard, 0, 2);
@@ -397,8 +508,9 @@ sub _basis {
     $basis{presses}{' '} = 1;
 
     $basis{distance}{ENTER} = 2*shift(@keyboard);
+    $basis{distance}{CAPS}  = 2*shift(@keyboard);
 
-    # populate $basis{clicks} and $basis{mm}
+    # populate $basis{presses} and $basis{distance}
     while( my($shift, $d) = splice(@keyboard, 0, 2) ) {
         my($lc, $uc) = splice(@layout, 0, 2);
 
@@ -443,10 +555,11 @@ sub J_per_click {
 ################ subroutines for keyboard specifications #################
 sub us_104 {
     return (
-        # distances the finger must move to reach the left shift,
-        # right shift and space, respectively (in millimeters)
+        # distances the finger must move to reach the left Shift,
+        # right Shift, Space, Enter and Caps Lock, respectively
+        # (in millimeters)
         qw{
-            15 30 0 35
+            15 30 0 35 15
         },
 
         # define the `12345 row
@@ -521,13 +634,13 @@ sub us_104 {
 }
 
 ################### subroutines for keyboard layouts ####################
+{ no warnings qw(qw);  # stop warnings about the '#' and ',' characters
 
-sub qwerty {
-    no warnings 'qw';  # stop warnings about the '#' and ',' characters
-    return (
-        # the first value is the character generated by pressing the key
-        # without any modifier.  The second value is the character generated
-        # when pressing the key along with the SHIFT key.
+    # the first value is the character generated by pressing the key
+    # without any modifier.  The second value is the character generated
+    # when pressing the key along with the SHIFT key.
+
+    register_layout('qwerty', [
         # define the 12345 row
         qw{
             ` ~
@@ -590,12 +703,9 @@ sub qwerty {
             . >
             / ?
         }
-    );
-}
+    ]);
 
-sub dvorak {
-    no warnings 'qw';  # stop warnings about the '#' and ',' characters
-    return (
+    register_layout('dvorak', [
         # define the 12345 row
         qw/
             `  ~
@@ -655,15 +765,9 @@ sub dvorak {
             v V
             z Z
         },
-    );
-}
+    ]);
 
-sub aset {
-    no warnings 'qw';  # stop warnings about the '#' and ',' characters
-    return (
-        # the first value is the character generated by pressing the key
-        # without any modifier.  The second value is the character generated
-        # when pressing the key along with the SHIFT key.
+    register_layout('aset', [
         # define the 12345 row
         qw{
             ` ~
@@ -726,9 +830,8 @@ sub aset {
             . >
             / ?
         }
-    );
+    ]);
 }
-
 
 1;
 __END__
