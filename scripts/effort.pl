@@ -47,7 +47,7 @@ filenames are specified, standard input is used.
 
 Options:
   -l layout   specify the desired keyboard layout where 'layout' is
-              one of: qwerty, dvorak, aset
+              one of: qwerty, dvorak, aset, xpert
   -c number   specify the number of capital letters that must be in
               a row before Caps Lock will be used
 
@@ -57,8 +57,8 @@ USAGE
 sub VERSION_MESSAGE {
     my ($fh) = @_;
 
-    my $rev = sprintf("%d", q$Revision: 88 $ =~ /(\d+)/);
-    my $date = sprintf("%s", q$Date: 2005-07-07 16:18:54 -0600 (Thu, 07 Jul 2005) $ =~ /\( (.*?) \)/x);
+    my $rev = sprintf("%d", q$Revision: 94 $ =~ /(\d+)/);
+    my $date = sprintf("%s", q$Date: 2005-07-15 13:42:31 -0600 (Fri, 15 Jul 2005) $ =~ /\( (.*?) \)/x);
 
     print $fh <<MSG;
 $0 revision $rev

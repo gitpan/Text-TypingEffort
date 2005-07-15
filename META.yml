@@ -1,6 +1,6 @@
 ---
 name: Text-TypingEffort
-version: 0.21
+version: 0.22
 author:
   - Michael Hendricks <michael@palmcluster.org>
 abstract: calculate the effort required to type a given text
@@ -10,5 +10,5 @@ build_requires:
 provides:
   Text::TypingEffort:
     file: lib/Text/TypingEffort.pm
-    version: 0.21
+    version: 0.22
 generated_by: Module::Build version 0.23
