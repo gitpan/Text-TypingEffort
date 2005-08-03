@@ -10,7 +10,8 @@ WriteMakefile
                          ],
           'VERSION_FROM' => 'lib/Text/TypingEffort.pm',
           'PREREQ_PM' => {
-                           'Test::More' => '0.31'
+                           'Test::More' => '0.31',
+                           'File::Temp' => '0.14'
                          }
         )
 ;
