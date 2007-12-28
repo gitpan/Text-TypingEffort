@@ -13,14 +13,14 @@ our @EXPORT_OK = qw(
     layout
     register_layout
 );
-our $VERSION = '0.23';
+our $VERSION = '0.24';
 
 our %basis;   # stores the basis for our calculations
 our %layouts; # stores the keyboard layouts
 
 =head1 NAME
 
-Text::TypingEffort - calculate the effort required to type a given text
+Text::TypingEffort - Calculate the effort required to type a given text
 
 =head1 SYNOPSIS
 
@@ -463,9 +463,23 @@ specified and true.
 Tactus Keyboard article on the mechanics and standards of
 keyboard design - L<http://www.tactuskeyboard.com/keymech.htm>
 
+=head1 CONTRIBUTING
+
+The source for Text::TypingEffort is maintained in a Git repository
+located at L<git://git.ndrix.com/Text-TypingEffort>.  To submit patches,
+you can do something like this:
+
+ $ git clone git://git.ndrix.com/Text-TypingEffort
+ $ cd Text-TypingEffort
+ # hack, commit, hack, commit
+ $ git format-patch -s origin
+ $ git send-email --to michael@ndrix.org *.patch
+
+See http://www.kernel.org/pub/software/scm/git/docs/everyday.html
+
 =head1 AUTHOR
 
-Michael Hendricks <michael@palmcluster.org>
+Michael Hendricks <michael@ndrix.org>
 
 Thanks to Ricardo Signes for a patch for the C<layout> and
 C<register_layout> subroutines.
@@ -477,11 +491,27 @@ L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=Text-TypingEffort>
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2005 by Michael Hendricks
+Copyright (C) 2005-2007 by Michael Hendricks
 
-This library is free software; you can redistribute it and/or modify
-it under the same terms as Perl itself, either Perl version 5.8.4 or,
-at your option, any later version of Perl 5 you may have available.
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject
+to the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR
+ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 
 =cut
 

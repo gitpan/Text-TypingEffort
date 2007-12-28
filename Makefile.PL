@@ -2,16 +2,16 @@
 use ExtUtils::MakeMaker;
 WriteMakefile
 (
-          'PL_FILES' => {},
-          'INSTALLDIRS' => 'site',
           'NAME' => 'Text::TypingEffort',
+          'VERSION_FROM' => 'lib/Text/TypingEffort.pm',
+          'PREREQ_PM' => {
+                           'File::Temp' => '0.14',
+                           'Test::More' => '0.31'
+                         },
+          'INSTALLDIRS' => 'site',
           'EXE_FILES' => [
                            'scripts/effort.pl'
                          ],
-          'VERSION_FROM' => 'lib/Text/TypingEffort.pm',
-          'PREREQ_PM' => {
-                           'Test::More' => '0.31',
-                           'File::Temp' => '0.14'
-                         }
+          'PL_FILES' => {}
         )
 ;

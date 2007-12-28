@@ -1,15 +1,23 @@
 ---
 name: Text-TypingEffort
-version: 0.23
+version: 0.24
 author:
-  - Michael Hendricks <michael@palmcluster.org>
-abstract: calculate the effort required to type a given text
-license: perl
+  - 'Michael Hendricks <michael@ndrix.org>'
+abstract: Calculate the effort required to type a given text
+license: mit
+resources:
+  bugtracker: http://rt.cpan.org/NoAuth/Bugs.html?Dist=Text-TypingEffort
+  homepage: http://git.ndrix.com/?p=Text-TypingEffort;a=summary
+  license: http://opensource.org/licenses/mit-license.php
+  repository: git://git.ndrix.com/Text-TypingEffort
 build_requires:
   File::Temp: 0.14
   Test::More: 0.31
 provides:
   Text::TypingEffort:
     file: lib/Text/TypingEffort.pm
-    version: 0.23
-generated_by: Module::Build version 0.23
+    version: 0.24
+generated_by: Module::Build version 0.2808
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.2.html
+  version: 1.2

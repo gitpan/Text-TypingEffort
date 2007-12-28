@@ -57,8 +57,8 @@ USAGE
 sub VERSION_MESSAGE {
     my ($fh) = @_;
 
-    my $rev = sprintf("%d", q$Revision: 94 $ =~ /(\d+)/);
-    my $date = sprintf("%s", q$Date: 2005-07-15 13:42:31 -0600 (Fri, 15 Jul 2005) $ =~ /\( (.*?) \)/x);
+    my $rev = sprintf("%d", q$Revision$ =~ /(\d+)/);
+    my $date = sprintf("%s", q$Date$ =~ /\( (.*?) \)/x);
 
     print $fh <<MSG;
 $0 revision $rev
